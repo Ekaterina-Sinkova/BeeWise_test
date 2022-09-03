@@ -1,16 +1,18 @@
 import pandas as pd
+import spacy
 pd.options.mode.chained_assignment = None
-#!python -m spacy download ru_core_news_md;
-import ru_core_news_md;
-nlp = ru_core_news_md.load()
 
+nlp = spacy.load("ru_core_news_md")
+
+#Загружаем файл с диалогами, делаем его копию для добавления флагов и отбираем часть строк с репликами менеджера для анализа.
 test_data = pd.read_csv('test_data.csv')
 data_output = test_data.copy(deep=True)
 data_output["insight"] = ""
 data = test_data[test_data['role'] == 'manager'].reset_index()
 
+#класс парсера
 class Dialog_parser:
-    GREETING = ['здравствуйте', 'приветствую', 'добрый день', 'доброе утро', 'добрый вечер']
+    GREETING = ['здравствуйте', 'приветствую', 'привет', 'добрый день', 'доброе утро', 'добрый вечер']
     FAREWELL = ['всего хорошего', 'до свидания', 'всего доброго', 'хорошего вам дня', 'хорошего дня','хорошего вечера', 'до встречи', 'до связи', 'будьте здоровы']
 
     @classmethod
@@ -32,6 +34,7 @@ class Dialog_parser:
         return names if names else 0
 
     def get_greeting(self,data):
+        """Return a df with the greeting lines for each manager"""
         res = pd.DataFrame(columns=['dlg_id', 'line_n', 'text'])
         data['greeting'] = data['text'].apply(self.has_greeting)
 
@@ -41,10 +44,11 @@ class Dialog_parser:
             res.loc[len(res)] = [id, line_n, text]
             cell = data_output['insight'].loc[(data_output['dlg_id'] == id) & (data_output['line_n'] == line_n)]
             if 'greeting' not in cell.to_string(index=False):
-                 data_output['insight'].loc[(data_output['dlg_id'] == id) & (data_output['line_n'] == line_n)] += 'greeting = True '
+                 data_output['insight'].loc[(data_output['dlg_id'] == id) & (data_output['line_n'] == line_n)] += 'greeting = True; '
         return res
 
     def get_introduction(self,data):
+        """Return a df with the names of managers and the lines where they introduce themselves"""
         res = pd.DataFrame(columns=['dlg_id', 'line_n', 'name','text'])
         data['PER'] = data['text'].apply(self.get_names)
         df = data[(data['PER'] != 0) & (data['text'].str.contains(('|').join(['это','зовут', 'говорит', 'представиться'])))]
@@ -56,10 +60,11 @@ class Dialog_parser:
             res.loc[len(res)] = [id, line_n, name, text]
             cell = data_output['insight'].loc[(data_output['dlg_id'] == id) & (data_output['line_n'] == line_n)] 
             if 'name' not in cell.to_string(index=False):
-                data_output['insight'].loc[(data_output['dlg_id'] == id) & (data_output['line_n'] == line_n)]  += 'name = True '
+                data_output['insight'].loc[(data_output['dlg_id'] == id) & (data_output['line_n'] == line_n)]  += 'name = True; '
         return res
     
     def get_company(self, data):
+        """Return a df with the names of companies. Not really working for two-word names"""
         res = pd.DataFrame(columns=['dlg_id', 'line_n', 'company'])
         df = data[(data['text'].str.contains('компания'))]
         for id in set(df['dlg_id']):
@@ -69,10 +74,11 @@ class Dialog_parser:
             res.loc[len(res)] = [id, line_n, company]
             cell = data_output['insight'].loc[(data_output['dlg_id'] == id) & (data_output['line_n'] == line_n)]
             if 'company' not in cell.to_string(index=False):
-                data_output['insight'].loc[(data_output['dlg_id'] == id) & (data_output['line_n'] == line_n)] += 'company = True '
+                data_output['insight'].loc[(data_output['dlg_id'] == id) & (data_output['line_n'] == line_n)] += 'company = True; '
         return res
     
     def get_farewell(self, data):
+        """Return a df with the lines where managers say goodbye"""
         res = pd.DataFrame(columns=['dlg_id', 'line_n', 'text'])
         data['farewell'] = data['text'].apply(self.has_farewell)
         for id in set(data[(data['farewell'] == True)]['dlg_id']):
@@ -81,10 +87,11 @@ class Dialog_parser:
             res.loc[len(res)] = [id, line_n, text]
             cell = data_output['insight'].loc[(data_output['dlg_id'] == id) & (data_output['line_n'] == line_n)]
             if 'farewell' not in cell.to_string(index=False):
-                data_output['insight'].loc[(data_output['dlg_id'] == id) & (data_output['line_n'] == line_n)] += 'farewell = True '
+                data_output['insight'].loc[(data_output['dlg_id'] == id) & (data_output['line_n'] == line_n)] += 'farewell = True; '
         return res
 
     def check_manager(self, data):
+        """Check whether managers are polite and saying hallo and goodbye"""
         res = pd.DataFrame(columns=['dlg_id', 'Politeness'])
 
         for id in set(data['dlg_id']):
@@ -100,12 +107,12 @@ if __name__ == '__main__':
     while True:
         try:
             task = int(input('''Что делаем?\n
-            [1] Извлекаем реплики с приветствием
-            [2] Извлекаем реплики, где менеджер представил себя, и имя менеджера 
-            [3] Извлекаем название компании
-            [4] Извлекаем реплики, где менеджер попрощался
-            [5] Проверять требование к менеджеру: «В каждом диалоге обязательно необходимо поздороваться и попрощаться с клиентом»
-            [6] Занести отметки в исходный файл
+            [1] Извлечь реплики с приветствием
+            [2] Извлечь реплики, где менеджер представил себя, и имя менеджера 
+            [3] Извлечь название компании
+            [4] Извлечь реплики, где менеджер попрощался
+            [5] Проверить требование к менеджеру: «В каждом диалоге обязательно необходимо поздороваться и попрощаться с клиентом»
+            [6] Сохранить файл с флагами
             [0] Закончить работу\n'''))
         except ValueError:
             print('Неправильное значение')
@@ -130,12 +137,10 @@ if __name__ == '__main__':
         elif task == 5:
             print(parser.check_manager(data))
             print()
-
         
         elif task == 6:
             data_output.to_csv('data_output.csv')
             print('Файл data_output.csv сохранен')
-
         
         elif task == 0:
             break
